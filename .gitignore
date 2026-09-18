@@ -223,5 +223,7 @@ __marimo__/
 # Git Worktrees
 .worktrees/
 
-# Autonomous Agent runtime outputs (preserve skills and agents)
-.agent/goals/
+# Autonomous Agent runtime outputs (preserve skills, agents, and curated goal specs)
+.agent/goals/*.log
+.agent/goals/goal-[0-9]*.md
+.agent/goals/execution-*.log

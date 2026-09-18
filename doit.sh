@@ -4,8 +4,8 @@ set -euo pipefail
 # ==============================================================================
 # Autonomous Multi-Agent TDD Engine (macOS & Linux)
 # Usage:
-#   Immediate: ./doit.sh ./src/billing "Fix discount calculation rounding error"
-#   Scheduled: ./doit.sh ./src/billing "Fix discount calculation rounding error" --schedule 1
+#   From Spec File: ./doit.sh .agent/goals/discount.md [--schedule 1]
+#   Inline Quick:   ./doit.sh ./src/billing "Fix discount calculation rounding error" [--schedule 1]
 # ==============================================================================
 
 TARGET_DIR="${1:-"."}"
@@ -27,6 +27,27 @@ WORKTREE_DIR="${REPO_ROOT}/.worktrees/${BRANCH_NAME}"
 GOAL_FILE_REL=".agent/goals/goal-${TIMESTAMP}.md"
 GOAL_FILE_ABS="${REPO_ROOT}/${GOAL_FILE_REL}"
 
+# Determine if input is a physical Goal spec file (.md) or inline args
+if [[ -f "${1:-""}" && "${1:-""}" == *.md ]]; then
+    GOAL_SPEC_PATH="${1}"
+    ABS_GOAL_PATH=$(cd "$(dirname "${GOAL_SPEC_PATH}")" && pwd)/$(basename "${GOAL_SPEC_PATH}")
+    GOAL_FILE_ABS="${ABS_GOAL_PATH}"
+    
+    # Extract target scope from the markdown header (- **Target Path Scope**: `...`)
+    EXTRACTED_TARGET=$(grep -E '^\s*-\s*\*\*Target Path Scope\*\*:' "${GOAL_FILE_ABS}" | head -n 1 | sed -E 's/.*`([^`]+)`.*/\1/' || echo "")
+    if [ -n "${EXTRACTED_TARGET}" ]; then
+        TARGET_DIR="${EXTRACTED_TARGET}"
+    else
+        TARGET_DIR="."
+    fi
+    BUG_DESCRIPTION=$(head -n 1 "${GOAL_FILE_ABS}" | sed -E 's/^#+ (Goal: )?//')
+    IS_CUSTOM_GOAL=true
+    SCHEDULE_FLAG="${2:-""}"
+    SCHEDULE_TIME="${3:-""}"
+else
+    IS_CUSTOM_GOAL=false
+fi
+
 # Handle Autonomous Scheduling / Delay
 if [ "${SCHEDULE_FLAG}" == "--schedule" ]; then
     DELAY_MINUTES="${SCHEDULE_TIME:-"1"}"
@@ -43,7 +64,11 @@ if [ "${SCHEDULE_FLAG}" == "--schedule" ]; then
     (
         echo "⏰ Waiting ${CLEAN_MINUTES} minute(s) before starting TDD engine..."
         sleep $((CLEAN_MINUTES * 60))
-        "${0}" "${TARGET_DIR}" "${BUG_DESCRIPTION}"
+        if [ "${IS_CUSTOM_GOAL}" = true ]; then
+            "${0}" "${GOAL_SPEC_PATH}"
+        else
+            "${0}" "${TARGET_DIR}" "${BUG_DESCRIPTION}"
+        fi
     ) > "${LOG_FILE}" 2>&1 &
 
     echo "🎉 Goal scheduled autonomously in background! PID: $!"
@@ -85,6 +110,7 @@ cat << 'EOF' > "${REPO_ROOT}/.agent/agents/refactor-agent/AGENT.md"
 Role: Consolidate duplicate tests into parameterized tables per AGENTS.md strictly inside target path.
 EOF
 
+
 # Relative path calculation
 ABS_TARGET_PATH=$(cd "${TARGET_DIR}" && pwd)
 REL_TARGET_PATH="${ABS_TARGET_PATH#"${REPO_ROOT}/"}"
@@ -92,9 +118,12 @@ if [ "${REL_TARGET_PATH}" == "${ABS_TARGET_PATH}" ]; then
     REL_TARGET_PATH="."
 fi
 
-echo "📝 [2/7] Generating Physical Goal File with Strict Scope..."
-mkdir -p "${REPO_ROOT}/.agent/goals"
-cat << EOF > "${GOAL_FILE_ABS}"
+if [ "${IS_CUSTOM_GOAL}" = true ]; then
+    echo "📝 [2/7] Using Curated Goal Spec: ${GOAL_FILE_ABS} (Target: ${REL_TARGET_PATH})..."
+else
+    echo "📝 [2/7] Generating Physical Goal File with Strict Scope..."
+    mkdir -p "${REPO_ROOT}/.agent/goals"
+    cat << EOF > "${GOAL_FILE_ABS}"
 # Goal: Autonomous TDD Patch for ${BUG_DESCRIPTION}
 
 - **Target Path Scope**: \`${REL_TARGET_PATH}\`
@@ -114,6 +143,7 @@ cat << EOF > "${GOAL_FILE_ABS}"
 ## End Condition
 - At least one valid \`test_*.py\` file exists in \`${REL_TARGET_PATH}\` and passes with 0 errors.
 EOF
+fi
 
 echo "🚀 [3/7] Creating Isolated Git Worktree Sandbox: ${WORKTREE_DIR}..."
 mkdir -p "${REPO_ROOT}/.worktrees"
