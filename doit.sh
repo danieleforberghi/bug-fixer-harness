@@ -81,7 +81,8 @@ echo "🛠️  [1/7] Bootstrapping Infrastructure & Subagents..."
 mkdir -p "${TARGET_DIR}"
 
 # 1. Persistent Root Rules
-cat << 'EOF' > "${REPO_ROOT}/AGENTS.md"
+if [ ! -f "${REPO_ROOT}/AGENTS.md" ]; then
+    cat << 'EOF' > "${REPO_ROOT}/AGENTS.md"
 # AGENTS.md
 ## Core TDD Guidelines
 - **RED**: Write failing tests before modifying implementation code.
@@ -89,26 +90,46 @@ cat << 'EOF' > "${REPO_ROOT}/AGENTS.md"
 - **REFACTOR**: Consolidate stacked tests into parameterized tables (@pytest.mark.parametrize) per DRY principles.
 - **IMPORTS**: Always import modules assuming repository root is on PYTHONPATH (e.g., `from src.billing.discount import ...`).
 EOF
+    echo "✨ Created default AGENTS.md"
+elif ! grep -q "## Core TDD Guidelines" "${REPO_ROOT}/AGENTS.md"; then
+    cat << 'EOF' >> "${REPO_ROOT}/AGENTS.md"
+
+## Core TDD Guidelines
+- **RED**: Write failing tests before modifying implementation code.
+- **GREEN**: Make minimal edits to pass the test.
+- **REFACTOR**: Consolidate stacked tests into parameterized tables (@pytest.mark.parametrize) per DRY principles.
+- **IMPORTS**: Always import modules assuming repository root is on PYTHONPATH (e.g., `from src.billing.discount import ...`).
+EOF
+    echo "➕ Appended Core TDD Guidelines to existing AGENTS.md"
+else
+    echo "ℹ️  Existing AGENTS.md found — preserving custom rules"
+fi
 
 # 2. Subagents Setup
 mkdir -p "${REPO_ROOT}/.agent/agents/red-agent"
-cat << 'EOF' > "${REPO_ROOT}/.agent/agents/red-agent/AGENT.md"
+if [ ! -f "${REPO_ROOT}/.agent/agents/red-agent/AGENT.md" ]; then
+    cat << 'EOF' > "${REPO_ROOT}/.agent/agents/red-agent/AGENT.md"
 # RED Agent (Reproducer)
 Role: Write a failing unit test reproducing the issue strictly inside the targeted path.
 Rules: Do NOT touch production code or files outside the target directory. Verify execution ends with a test failure (RED).
 EOF
+fi
 
 mkdir -p "${REPO_ROOT}/.agent/agents/green-agent"
-cat << 'EOF' > "${REPO_ROOT}/.agent/agents/green-agent/AGENT.md"
+if [ ! -f "${REPO_ROOT}/.agent/agents/green-agent/AGENT.md" ]; then
+    cat << 'EOF' > "${REPO_ROOT}/.agent/agents/green-agent/AGENT.md"
 # GREEN Agent (Fixer)
 Role: Edit production code inside target path to pass tests. Do NOT alter files outside assigned scope.
 EOF
+fi
 
 mkdir -p "${REPO_ROOT}/.agent/agents/refactor-agent"
-cat << 'EOF' > "${REPO_ROOT}/.agent/agents/refactor-agent/AGENT.md"
+if [ ! -f "${REPO_ROOT}/.agent/agents/refactor-agent/AGENT.md" ]; then
+    cat << 'EOF' > "${REPO_ROOT}/.agent/agents/refactor-agent/AGENT.md"
 # REFACTOR Agent (Clean-up)
 Role: Consolidate duplicate tests into parameterized tables per AGENTS.md strictly inside target path.
 EOF
+fi
 
 
 # Relative path calculation
@@ -189,7 +210,7 @@ echo "🔀 [6/7] Pushing Branch & Creating Pull Request..."
 cd "${WORKTREE_DIR}"
 
 git add "${REL_TARGET_PATH}"
-git commit -m "fix(${REL_TARGET_PATH}): autonomous TDD patch for${BUG_DESCRIPTION}" || true
+git commit -m "fix(${REL_TARGET_PATH}): autonomous TDD patch for ${BUG_DESCRIPTION}" || true
 git push origin "${BRANCH_NAME}"
 
 # Hämta exakt repository-namn (t.ex. danieleforberghi/bugg-fixer-harness) från git remote
@@ -198,7 +219,7 @@ REPO_NICK=$(git config --get remote.origin.url | sed -E 's/.*github\.com[:\/](.+
 if ! gh pr create \
     --repo "${REPO_NICK}" \
     --head "${BRANCH_NAME}" \
-    --title "fix(${REL_TARGET_PATH}): autonomous patch for${BUG_DESCRIPTION}" \
+    --title "fix(${REL_TARGET_PATH}): autonomous patch for ${BUG_DESCRIPTION}" \
     --body "### Autonomous Multi-Agent TDD Patch
     - **Target Scope:** \`${REL_TARGET_PATH}\`
     - **Issue:** ${BUG_DESCRIPTION}
